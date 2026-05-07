@@ -1,57 +1,441 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
+import { Filter, Search, Calendar, Tag, Trash2, Edit, Save, X, ChevronDown, Sliders, Sparkles, Database } from 'lucide-react'
 
 export default function FilterCRUD({ session }) {
   const [filters, setFilters] = useState([])
-  const [name, setName] = useState('')
-  const [criteria, setCriteria] = useState({ status: '' })
-  const [editing, setEditing] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [activeFilter, setActiveFilter] = useState(null)
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    status: 'all',
+    dateFrom: '',
+    dateTo: '',
+    searchName: '',
+    searchEmail: '',
+    sortBy: 'created_at',
+    sortOrder: 'desc'
+  })
+
+  // Filtros rápidos predefinidos
+  const quickFilters = [
+    { id: 'today', name: 'Hoy', icon: Calendar, color: 'cyan' },
+    { id: 'week', name: 'Esta Semana', icon: Calendar, color: 'blue' },
+    { id: 'month', name: 'Este Mes', icon: Calendar, color: 'purple' },
+    { id: 'active', name: 'Solo Activos', icon: Filter, color: 'emerald' },
+    { id: 'pending', name: 'Pendientes', icon: Filter, color: 'orange' },
+  ]
 
   useEffect(() => { loadFilters() }, [session])
 
   const loadFilters = async () => {
-    const { data } = await supabase.from('filters').select('*').eq('user_id', session.user.id)
+    setLoading(true)
+    const { data } = await supabase
+      .from('filters')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
     setFilters(data || [])
+    setLoading(false)
   }
 
-  const save = async () => {
-    if (!name.trim()) return alert('Nombre requerido')
-    const payload = { name, criteria, user_id: session.user.id }
-    const { error } = editing
-      ? await supabase.from('filters').update(payload).eq('id', editing)
-      : await supabase.from('filters').insert([payload])
-    if (!error) { setName(''); setCriteria({ status: '' }); setEditing(null); loadFilters() }
-    else alert(error.message)
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    const { error } = editingId
+      ? await supabase.from('filters').update(formData).eq('id', editingId)
+      : await supabase.from('filters').insert([{ ...formData, user_id: session.user.id }])
+    
+    if (!error) {
+      setShowModal(false)
+      setEditingId(null)
+      setFormData({
+        name: '',
+        status: 'all',
+        dateFrom: '',
+        dateTo: '',
+        searchName: '',
+        searchEmail: '',
+        sortBy: 'created_at',
+        sortOrder: 'desc'
+      })
+      loadFilters()
+    } else {
+      alert('Error: ' + error.message)
+    }
   }
 
-  const remove = async (id) => {
-    if (confirm('¿Eliminar filtro?')) {
+  const handleDelete = async (id) => {
+    if (confirm('¿Eliminar este filtro guardado?')) {
       await supabase.from('filters').delete().eq('id', id)
       loadFilters()
     }
   }
 
+  const applyQuickFilter = (filterType) => {
+    const today = new Date()
+    const newFormData = {
+      name: `Filtro Rápido - ${filterType}`,
+      status: 'all',
+      dateFrom: '',
+      dateTo: '',
+      searchName: '',
+      searchEmail: '',
+      sortBy: 'created_at',
+      sortOrder: 'desc'
+    }
+
+    switch(filterType) {
+      case 'today':
+        newFormData.dateFrom = today.toISOString().split('T')[0]
+        newFormData.dateTo = today.toISOString().split('T')[0]
+        break
+      case 'week':
+        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+        newFormData.dateFrom = weekAgo.toISOString().split('T')[0]
+        newFormData.dateTo = today.toISOString().split('T')[0]
+        break
+      case 'month':
+        const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+        newFormData.dateFrom = monthAgo.toISOString().split('T')[0]
+        newFormData.dateTo = today.toISOString().split('T')[0]
+        break
+      case 'active':
+        newFormData.status = 'active'
+        break
+      case 'pending':
+        newFormData.status = 'pending'
+        break
+      default:
+        break
+    }
+
+    setFormData(newFormData)
+    setActiveFilter(filterType)
+    // Aquí podrías aplicar el filtro automáticamente a ClientView
+  }
+
+  const getGradientColor = (color) => {
+    const gradients = {
+      cyan: 'from-cyan-500 to-blue-600',
+      blue: 'from-blue-500 to-indigo-600',
+      purple: 'from-purple-500 to-pink-600',
+      emerald: 'from-emerald-500 to-teal-600',
+      orange: 'from-orange-500 to-red-600'
+    }
+    return gradients[color] || gradients.cyan
+  }
+
   return (
-    <div className="p-4 bg-white rounded-xl shadow mt-6">
-      <h2 className="font-bold text-lg mb-3">Filtros guardados</h2>
-      <div className="flex gap-2 mb-4">
-        <input className="border p-2 rounded-lg flex-1" placeholder="Nombre del filtro" value={name} onChange={e => setName(e.target.value)} />
-        <select className="border p-2 rounded-lg" value={criteria.status} onChange={e => setCriteria({...criteria, status: e.target.value})}>
-          <option value="">Todos</option><option value="active">Activo</option><option value="inactive">Inactivo</option>
-        </select>
-        <button onClick={save} className="bg-blue-600 text-white px-4 rounded-lg">{editing ? 'Actualizar' : 'Guardar'}</button>
+    <div className="space-y-6 relative z-10">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">
+            Centro de Filtros
+          </h3>
+          <p className="text-slate-400 mt-1">Crea y gestiona filtros personalizados</p>
+        </div>
+        <button 
+          onClick={() => setShowModal(true)}
+          className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] hover:scale-105 font-bold"
+        >
+          <Sliders size={20} /> Nuevo Filtro
+        </button>
       </div>
-      <ul className="space-y-2">
-        {filters.map(f => (
-          <li key={f.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
-            <span className="font-medium">{f.name}</span>
-            <div className="flex gap-2">
-              <button onClick={() => { setEditing(f.id); setName(f.name); setCriteria(f.criteria) }} className="text-blue-600 text-sm">Editar</button>
-              <button onClick={() => remove(f.id)} className="text-red-600 text-sm">Eliminar</button>
+
+      {/* Filtros Rápidos */}
+      <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6">
+        <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <Sparkles className="text-yellow-400" size={20} />
+          Filtros Rápidos
+        </h4>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          {quickFilters.map((filter) => (
+            <button
+              key={filter.id}
+              onClick={() => applyQuickFilter(filter.id)}
+              className={`group relative overflow-hidden bg-slate-800/50 hover:bg-slate-800 border-2 rounded-2xl p-4 transition-all duration-300 hover:scale-105 ${
+                activeFilter === filter.id 
+                  ? `border-${filter.color}-500 shadow-[0_0_20px_rgba(var(--${filter.color}-rgb),0.4)]` 
+                  : 'border-slate-700 hover:border-slate-600'
+              }`}
+            >
+              <div className={`absolute inset-0 bg-gradient-to-br ${getGradientColor(filter.color)} opacity-0 group-hover:opacity-10 transition-opacity`}></div>
+              <filter.icon className={`w-8 h-8 mb-2 mx-auto ${activeFilter === filter.id ? `text-${filter.color}-400` : 'text-slate-400 group-hover:text-white'} transition-colors`} />
+              <p className={`text-sm font-semibold ${activeFilter === filter.id ? `text-${filter.color}-400` : 'text-slate-300 group-hover:text-white'}`}>
+                {filter.name}
+              </p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Filtros Guardados */}
+      <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 rounded-3xl overflow-hidden">
+        <div className="p-6 border-b border-slate-700/50 bg-gradient-to-r from-slate-900 to-slate-800">
+          <h3 className="text-xl font-bold text-white flex items-center gap-3">
+            <Database className="text-cyan-400" size={24} />
+            Filtros Personalizados Guardados
+          </h3>
+          <p className="text-slate-400 text-sm mt-1">Total: {filters.length} filtro{filters.length !== 1 ? 's' : ''}</p>
+        </div>
+
+        {loading ? (
+          <div className="p-12 text-center text-slate-400">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+            Cargando filtros...
+          </div>
+        ) : filters.length === 0 ? (
+          <div className="p-16 text-center">
+            <Filter className="mx-auto h-16 w-16 text-slate-600 mb-4" />
+            <p className="text-slate-400 text-lg">No hay filtros guardados</p>
+            <p className="text-slate-500 text-sm mt-2">Crea tu primer filtro personalizado</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-700/50">
+            {filters.map((filter) => (
+              <div key={filter.id} className="p-6 hover:bg-slate-800/50 transition-all group">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-start gap-4 flex-1">
+                    <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg">
+                      <Filter size={24} />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-white text-lg mb-2">{filter.name}</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        {filter.status !== 'all' && (
+                          <div className="bg-slate-950/50 px-3 py-2 rounded-lg border border-slate-700/50">
+                            <span className="text-slate-400">Estado:</span>
+                            <span className="text-cyan-400 font-semibold ml-2 capitalize">{filter.status}</span>
+                          </div>
+                        )}
+                        {filter.dateFrom && (
+                          <div className="bg-slate-950/50 px-3 py-2 rounded-lg border border-slate-700/50">
+                            <span className="text-slate-400">Desde:</span>
+                            <span className="text-purple-400 font-semibold ml-2">{new Date(filter.dateFrom).toLocaleDateString()}</span>
+                          </div>
+                        )}
+                        {filter.dateTo && (
+                          <div className="bg-slate-950/50 px-3 py-2 rounded-lg border border-slate-700/50">
+                            <span className="text-slate-400">Hasta:</span>
+                            <span className="text-purple-400 font-semibold ml-2">{new Date(filter.dateTo).toLocaleDateString()}</span>
+                          </div>
+                        )}
+                        {filter.searchName && (
+                          <div className="bg-slate-950/50 px-3 py-2 rounded-lg border border-slate-700/50">
+                            <span className="text-slate-400">Nombre:</span>
+                            <span className="text-emerald-400 font-semibold ml-2">{filter.searchName}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <Calendar size={12} />
+                          Creado: {new Date(filter.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2 ml-4">
+                    <button 
+                      onClick={() => {
+                        setFormData(filter)
+                        setEditingId(filter.id)
+                        setShowModal(true)
+                      }}
+                      className="p-3 bg-slate-800 hover:bg-cyan-500/20 text-cyan-400 rounded-xl transition-all border border-slate-700 hover:border-cyan-500/50"
+                    >
+                      <Edit size={18} />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(filter.id)}
+                      className="p-3 bg-slate-800 hover:bg-red-500/20 text-red-400 rounded-xl transition-all border border-slate-700 hover:border-red-500/50"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal de Crear/Editar Filtro */}
+      {showModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] w-full max-w-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            
+            <div className="bg-gradient-to-r from-cyan-500/20 to-purple-500/20 p-6 border-b border-slate-700 sticky top-0">
+              <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                <Sliders className="text-cyan-400" size={24} />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">
+                  {editingId ? 'Editar Filtro' : 'Crear Nuevo Filtro'}
+                </span>
+              </h3>
             </div>
-          </li>
-        ))}
-      </ul>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {/* Nombre del Filtro */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">
+                  Nombre del Filtro *
+                </label>
+                <div className="relative">
+                  <Tag className="absolute left-4 top-3.5 text-slate-500" size={20} />
+                  <input 
+                    required 
+                    value={formData.name} 
+                    onChange={e => setFormData({...formData, name: e.target.value})} 
+                    className="w-full bg-slate-950 border border-slate-700 text-white pl-12 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none transition-all placeholder:text-slate-600"
+                    placeholder="Ej: Clientes Activos de este Mes"
+                  />
+                </div>
+              </div>
+
+              {/* Estado */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">
+                  Estado del Cliente
+                </label>
+                <div className="relative">
+                  <Filter className="absolute left-4 top-3.5 text-slate-500" size={20} />
+                  <select 
+                    value={formData.status} 
+                    onChange={e => setFormData({...formData, status: e.target.value})} 
+                    className="w-full bg-slate-950 border border-slate-700 text-white pl-12 pr-10 py-3 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none transition-all appearance-none cursor-pointer"
+                  >
+                    <option value="all">Todos los estados</option>
+                    <option value="active">Activo</option>
+                    <option value="pending">Pendiente</option>
+                    <option value="inactive">Inactivo</option>
+                  </select>
+                  <ChevronDown className="absolute right-4 top-3.5 text-slate-500 pointer-events-none" size={20} />
+                </div>
+              </div>
+
+              {/* Rango de Fechas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">
+                    Fecha Desde
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-4 top-3.5 text-slate-500" size={20} />
+                    <input 
+                      type="date"
+                      value={formData.dateFrom} 
+                      onChange={e => setFormData({...formData, dateFrom: e.target.value})} 
+                      className="w-full bg-slate-950 border border-slate-700 text-white pl-12 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">
+                    Fecha Hasta
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-4 top-3.5 text-slate-500" size={20} />
+                    <input 
+                      type="date"
+                      value={formData.dateTo} 
+                      onChange={e => setFormData({...formData, dateTo: e.target.value})} 
+                      className="w-full bg-slate-950 border border-slate-700 text-white pl-12 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Búsquedas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">
+                    Buscar por Nombre
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-3.5 text-slate-500" size={20} />
+                    <input 
+                      value={formData.searchName} 
+                      onChange={e => setFormData({...formData, searchName: e.target.value})} 
+                      className="w-full bg-slate-950 border border-slate-700 text-white pl-12 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none transition-all placeholder:text-slate-600"
+                      placeholder="Ej: Davivienda"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">
+                    Buscar por Email
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-3.5 text-slate-500" size={20} />
+                    <input 
+                      type="email"
+                      value={formData.searchEmail} 
+                      onChange={e => setFormData({...formData, searchEmail: e.target.value})} 
+                      className="w-full bg-slate-950 border border-slate-700 text-white pl-12 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none transition-all placeholder:text-slate-600"
+                      placeholder="Ej: @gmail.com"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Ordenamiento */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">
+                    Ordenar por
+                  </label>
+                  <select 
+                    value={formData.sortBy} 
+                    onChange={e => setFormData({...formData, sortBy: e.target.value})} 
+                    className="w-full bg-slate-950 border border-slate-700 text-white px-4 py-3 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none transition-all"
+                  >
+                    <option value="created_at">Fecha de creación</option>
+                    <option value="name">Nombre</option>
+                    <option value="email">Email</option>
+                    <option value="status">Estado</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">
+                    Orden
+                  </label>
+                  <select 
+                    value={formData.sortOrder} 
+                    onChange={e => setFormData({...formData, sortOrder: e.target.value})} 
+                    className="w-full bg-slate-950 border border-slate-700 text-white px-4 py-3 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none transition-all"
+                  >
+                    <option value="desc">Descendente (Más reciente)</option>
+                    <option value="asc">Ascendente (Más antiguo)</option>
+                  </select>
+                </div>
+              </div>
+              
+              {/* Botones */}
+              <div className="flex gap-3 pt-4 border-t border-slate-700">
+                <button 
+                  type="button" 
+                  onClick={() => setShowModal(false)} 
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-xl font-bold transition-all border border-slate-700 flex items-center justify-center gap-2"
+                >
+                  <X size={18} /> Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] transition-all flex items-center justify-center gap-2"
+                >
+                  <Save size={18} /> Guardar Filtro
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
