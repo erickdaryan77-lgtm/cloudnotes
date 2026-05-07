@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
-import { LayoutDashboard, Users, Filter, LogOut, TrendingUp, Activity, Zap, Sparkles } from 'lucide-react'
+import { LayoutDashboard, Users, Filter, LogOut, TrendingUp, Activity, Zap, Sparkles, Settings as SettingsIcon } from 'lucide-react'
 import ClientView from './ClientView'
 import FilterCRUD from './FilterCRUD'
 import Auth from './Auth'
 import Settings from './Settings'  // Agrega esto junto a los otros imports
-import { LayoutDashboard, Users, Filter, LogOut, TrendingUp, Activity, Zap, Sparkles, Settings as SettingsIcon } from 'lucide-react'
 
 function Dashboard({ session }) {
   const [clients, setClients] = useState([])
