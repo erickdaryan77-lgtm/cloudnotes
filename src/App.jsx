@@ -4,6 +4,8 @@ import { LayoutDashboard, Users, Filter, LogOut, TrendingUp, Activity, Zap, Spar
 import ClientView from './ClientView'
 import FilterCRUD from './FilterCRUD'
 import Auth from './Auth'
+import Settings from './Settings'  // Agrega esto junto a los otros imports
+import { LayoutDashboard, Users, Filter, LogOut, TrendingUp, Activity, Zap, Sparkles, Settings as SettingsIcon } from 'lucide-react'
 
 function Dashboard({ session }) {
   const [clients, setClients] = useState([])
@@ -242,7 +244,8 @@ export default function App() {
           {[
             { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
             { id: 'clients', icon: Users, label: 'Clientes' },
-            { id: 'filters', icon: Filter, label: 'Filtros' }
+            { id: 'filters', icon: Filter, label: 'Filtros' },
+            { id: 'settings', icon: SettingsIcon, label: 'Configuración' }  // Agrega esta línea
           ].map((item) => (
             <button
               key={item.id}
@@ -293,6 +296,7 @@ export default function App() {
           {view === 'dashboard' && <Dashboard session={session} />}
           {view === 'clients' && <ClientView session={session} />}
           {view === 'filters' && <FilterCRUD session={session} />}
+          {view === 'settings' && <Settings session={session} />}  {/* Agrega esta línea */}
         </div>
       </main>
     </div>
