@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
-import { Filter, Search, Calendar, Tag, Trash2, Edit, Save, X, ChevronDown, Sliders, Sparkles, Database } from 'lucide-react'
+import { Filter, Search, Calendar, Tag, Trash2, Edit, Save, X, ChevronDown, Sliders, Sparkles, Database, Users, Eye, EyeOff } from 'lucide-react'
 
 export default function FilterCRUD({ session }) {
   const [filters, setFilters] = useState([])
+  const [clients, setClients] = useState([])
+  const [showClients, setShowClients] = useState(false) // Toggle para mostrar/ocultar clientes
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -30,7 +32,10 @@ export default function FilterCRUD({ session }) {
     { id: 'pending', name: 'Pendientes', icon: Filter, color: 'orange' },
   ]
 
-  useEffect(() => { loadFilters() }, [session])
+  useEffect(() => { 
+    loadFilters()
+    loadClients()
+  }, [session])
 
   const loadFilters = async () => {
     setLoading(true)
@@ -41,6 +46,15 @@ export default function FilterCRUD({ session }) {
       .order('created_at', { ascending: false })
     setFilters(data || [])
     setLoading(false)
+  }
+
+  const loadClients = async () => {
+    const { data } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+    setClients(data || [])
   }
 
   const handleSubmit = async (e) => {
@@ -115,7 +129,6 @@ export default function FilterCRUD({ session }) {
 
     setFormData(newFormData)
     setActiveFilter(filterType)
-    // Aquí podrías aplicar el filtro automáticamente a ClientView
   }
 
   const getGradientColor = (color) => {
@@ -139,13 +152,72 @@ export default function FilterCRUD({ session }) {
           </h3>
           <p className="text-slate-400 mt-1">Crea y gestiona filtros personalizados</p>
         </div>
-        <button 
-          onClick={() => setShowModal(true)}
-          className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] hover:scale-105 font-bold"
-        >
-          <Sliders size={20} /> Nuevo Filtro
-        </button>
+        <div className="flex gap-3">
+          {/* Botón para mostrar/ocultar clientes */}
+          <button 
+            onClick={() => setShowClients(!showClients)}
+            className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all border border-slate-700"
+          >
+            {showClients ? <EyeOff size={20} /> : <Eye size={20} />}
+            {showClients ? 'Ocultar Clientes' : `Ver Clientes (${clients.length})`}
+          </button>
+          <button 
+            onClick={() => setShowModal(true)}
+            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] hover:scale-105 font-bold"
+          >
+            <Sliders size={20} /> Nuevo Filtro
+          </button>
+        </div>
       </div>
+
+      {/* Sección de Clientes (Toggle) */}
+      {showClients && (
+        <div className="bg-slate-900/60 backdrop-blur-xl border border-cyan-500/30 rounded-3xl overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.2)]">
+          <div className="p-6 border-b border-slate-700/50 bg-gradient-to-r from-cyan-500/10 to-blue-600/10">
+            <h4 className="text-xl font-bold text-white flex items-center gap-3">
+              <Users className="text-cyan-400" size={24} />
+              Clientes Registrados ({clients.length})
+            </h4>
+            <p className="text-slate-400 text-sm mt-1">Referencia rápida para crear filtros</p>
+          </div>
+          
+          {clients.length === 0 ? (
+            <div className="p-12 text-center text-slate-400">
+              <Users size={48} className="mx-auto mb-4 opacity-50" />
+              <p>No hay clientes registrados</p>
+              <p className="text-slate-500 text-sm mt-2">Ve a la sección "Clientes" para agregar</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
+              {clients.map(client => (
+                <div key={client.id} className="bg-slate-950/50 border border-slate-700/50 rounded-xl p-4 hover:border-cyan-500/50 transition-all group">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold">
+                        {client.name[0]}
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-white">{client.name}</h5>
+                        <p className="text-xs text-slate-400">{client.email || 'Sin email'}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 rounded text-xs font-bold ${
+                      client.status === 'active' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' :
+                      client.status === 'pending' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50' :
+                      'bg-red-500/20 text-red-400 border border-red-500/50'
+                    }`}>
+                      {client.status}
+                    </span>
+                  </div>
+                  {client.notes && (
+                    <p className="text-xs text-slate-500 italic mt-2 line-clamp-2">"{client.notes}"</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filtros Rápidos */}
       <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6">
@@ -266,7 +338,7 @@ export default function FilterCRUD({ session }) {
         )}
       </div>
 
-      {/* Modal de Crear/Editar Filtro */}
+      {/* Modal de Crear/Editar Filtro (se mantiene igual que antes) */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] w-full max-w-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
